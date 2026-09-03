@@ -1,0 +1,48 @@
+/.phpunit.cache
+/node_modules
+/public/build
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
+/vendor
+.env
+.env.backup
+.env.production
+.env.local
+.phpactor.json
+.phpunit.result.cache
+Homestead.json
+Homestead.yaml
+npm-debug.log
+yarn-error.log
+/auth.json
+/.fleet
+/.idea
+/.nova
+/.vscode
+/.zed
+
+# Archivos de log
+*.log
+/storage/logs/*.log
+
+# Archivos temporales
+*.tmp
+*.swp
+*.swo
+*~
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Backups de base de datos
+*.sql
+*.sqlite
+*.sqlite-journal
+
+# Archivos de testing
+.phpunit.result.cache
+/coverage/
