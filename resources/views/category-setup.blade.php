@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Configuracion inicial | Registro Video</title>@vite(['resources/css/app.css', 'resources/js/app.js'])</head><body class="min-h-screen bg-slate-950/55 font-sans text-slate-900 antialiased"><div class="fixed inset-0 grid place-items-center bg-slate-950/55 p-4 backdrop-blur-sm"><div class="w-full max-w-lg rounded-2xl bg-white p-7 shadow-2xl ring-1 ring-black/10 sm:p-9"><div class="mb-8 flex items-start justify-between gap-4"><div><p class="text-sm font-semibold uppercase tracking-[0.18em] text-red-600">Primer ingreso</p><h1 class="mt-2 text-3xl font-bold text-slate-900">Configura tu espacio</h1></div><span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-red-600 text-xl text-white">▶</span></div><p class="mb-7 text-sm leading-6 text-slate-500">Hola, {{ $user->name }}. Elige el tema principal que usarás para organizar tus videos.</p>
+    <form method="POST" action="{{ route('category.setup.update') }}">@csrf
+        <label for="categoria_principal" class="block text-sm font-medium text-slate-700">¿Para qué usarás Registro Video?</label>
+        <select id="categoria_principal" name="categoria_principal" required autofocus class="mt-2 block w-full rounded-md border-slate-300 py-3 focus:border-red-500 focus:ring-red-500"><option value="">Selecciona una categoría</option>@foreach (['Naturaleza', 'Linea blanca', 'Tecnologia', 'Cocina', 'Educacion', 'Otro'] as $category)<option value="{{ $category }}">{{ $category }}</option>@endforeach</select>
+        <x-input-error :messages="$errors->get('categoria_principal')" class="mt-2" />
+        <button class="mt-6 w-full rounded-md bg-red-600 px-5 py-3 text-sm font-semibold text-white hover:bg-red-700">Continuar</button>
+    </form>
+</div></div></body></html>

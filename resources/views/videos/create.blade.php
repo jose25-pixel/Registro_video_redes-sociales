@@ -1,0 +1,4 @@
+<x-app-layout>
+    <x-slot name="header"><h2 class="font-semibold text-xl text-gray-800 leading-tight">Nuevo video</h2></x-slot>
+    <div class="py-8"><div class="max-w-5xl mx-auto sm:px-6 lg:px-8"><div class="rounded-lg bg-white p-6 shadow-sm"><form method="POST" action="{{ route('videos.store') }}" enctype="multipart/form-data">@csrf @include('videos._form')<div class="mt-6 flex justify-end gap-3"><a href="{{ route('videos.index') }}" class="rounded-md px-4 py-2 text-sm text-gray-600">Cancelar</a><button class="rounded-md bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800">Guardar video</button></div></form></div></div></div>
+</x-app-layout>
