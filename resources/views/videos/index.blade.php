@@ -103,7 +103,8 @@
                     @endif
                     <div class="mt-4 grid gap-4 md:grid-cols-3">
                         @foreach (['facebook' => ['Facebook', 'border-blue-200 bg-blue-50'], 'tiktok' => ['TikTok', 'border-purple-200 bg-purple-50'], 'instagram' => ['Instagram', 'border-pink-200 bg-pink-50']] as $platform => [$label, $classes])
-                            @php($socialVideosByModel = $suggestions->map(fn ($suggestion) => ['video' => $suggestion, 'publication' => $suggestion->socialPublications->firstWhere('platform', $platform)])->filter(fn ($entry) => $entry['publication']?->publicado === 'si' && $entry['publication']?->link)->groupBy(fn ($entry) => trim((string) $entry['video']->modelo) ?: 'Sin modelo'))
+                            @php($socialVideos = $latest ? collect([$latest])->concat($suggestions) : $suggestions)
+                            @php($socialVideosByModel = $socialVideos->map(fn ($suggestion) => ['video' => $suggestion, 'publication' => $suggestion->socialPublications->firstWhere('platform', $platform)])->filter(fn ($entry) => $entry['publication']?->publicado === 'si' && $entry['publication']?->link)->unique(fn ($entry) => $entry['video']->id.'-'.$entry['publication']->id)->groupBy(fn ($entry) => trim((string) $entry['video']->modelo) ?: 'Sin modelo'))
                             @foreach ($socialVideosByModel as $model => $entries)
                                 @php($entries = $entries->take(8))
                                 @php($copySocialText = "{$label}: {$model}\n\n")
@@ -202,7 +203,7 @@
                                 shownPlaylists.add(publication.linkLista);
                                 const playlist = document.createElement('div');
                                 playlist.className = 'border-b border-gray-100 pb-3';
-                                playlist.innerHTML = '<p                                 <footer class="text-sm text-slate-500">&copy; 2026 Registro Video. Desarrollado por Entornos Web y PN Cruz Zabaleta.</footer>class="text-xs font-semibold uppercase text-gray-500">Lista de reproduccion</p><p class="mt-1 text-sm text-gray-800"></p><a class="mt-1 block break-all text-sm text-sky-700 underline" target="_blank" rel="noopener"></a>';
+                                playlist.innerHTML = '<p class="text-xs font-semibold uppercase text-gray-500">Lista de reproduccion</p><p class="mt-1 text-sm text-gray-800"></p><a class="mt-1 block break-all text-sm text-sky-700 underline" target="_blank" rel="noopener"></a>';
                                 playlist.querySelector('p:nth-child(2)').textContent = publication.tituloLista || 'Sin titulo';
                                 const playlistLink = playlist.querySelector('a');
                                 playlistLink.href = publication.linkLista;

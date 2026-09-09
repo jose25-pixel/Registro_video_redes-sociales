@@ -26,7 +26,7 @@ class YoutubeJsonTrackerTest extends TestCase
             ],
         ]));
 
-        $response->assertSessionHasNoErrors()->assertRedirect(route('dashboard'));
+        $response->assertSessionHasNoErrors()->assertRedirect(route('videos.index'));
         $this->assertDatabaseHas('youtube_json_trackers', ['user_id' => $user->id, 'titulo' => 'Diagnostico de lavadora']);
         $this->assertDatabaseHas('youtube_json_trackers', ['titulo_lista' => 'Diagnosticos Samsung Wobble', 'link_lista' => 'https://www.youtube.com/playlist?list=abc123']);
         $this->assertDatabaseHas('youtube_json_trackers', ['mes' => 'septiembre', 'anio' => 2026]);
@@ -59,7 +59,7 @@ class YoutubeJsonTrackerTest extends TestCase
 
         $this->actingAs($user)->post(route('videos.store'), $data)
             ->assertSessionHasNoErrors()
-            ->assertRedirect(route('dashboard'));
+            ->assertRedirect(route('videos.index'));
 
         $video = YoutubeJsonTracker::where('titulo', $data['titulo'])->firstOrFail();
         $this->assertNull($video->youtube_link);
@@ -81,7 +81,7 @@ class YoutubeJsonTrackerTest extends TestCase
             'youtube_publicado' => 'no',
             'descripcion' => 'Registro de una planta sin publicacion en YouTube.',
             'social' => ['facebook' => ['publicado' => 'no']],
-        ])->assertSessionHasNoErrors()->assertRedirect(route('dashboard'));
+        ])->assertSessionHasNoErrors()->assertRedirect(route('videos.index'));
 
         $this->assertDatabaseHas('youtube_json_trackers', [
             'user_id' => $user->id,

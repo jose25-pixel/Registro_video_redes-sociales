@@ -73,7 +73,7 @@ class YoutubeJsonTrackerController extends Controller
                     })
                     ->latest()
                     ->get()
-                    ->unique('youtube_link')
+                    ->unique('id')
                     ->groupBy(fn (YoutubeJsonTracker $video) => trim((string) $video->modelo) ?: 'Sin modelo')
                     ->map(fn ($modelVideos) => $modelVideos->take(8))
                     ->flatten(1)
@@ -114,7 +114,7 @@ class YoutubeJsonTrackerController extends Controller
 
                 $suggestions = $mainModelVideos
                     ->concat($fallbackVideos)
-                    ->unique('youtube_link')
+                    ->unique('id')
                     ->groupBy(fn (YoutubeJsonTracker $video) => trim((string) $video->modelo) ?: 'Sin modelo')
                     ->map(fn ($modelVideos) => $modelVideos->take(8))
                     ->sortBy(fn ($modelVideos, string $model) => $model === $latest->modelo ? 0 : 1)
@@ -181,7 +181,7 @@ class YoutubeJsonTrackerController extends Controller
 
         $videos = $sameModelVideos
             ->concat($fallbackVideos)
-            ->unique('youtube_link')
+            ->unique('id')
             ->values()
             ->groupBy(fn (YoutubeJsonTracker $video) => trim((string) $video->modelo) ?: 'Sin modelo')
             ->map(fn ($modelVideos, string $model) => [
@@ -217,7 +217,7 @@ class YoutubeJsonTrackerController extends Controller
         $video = $request->user()->videos()->create($data);
         $this->saveSocialPublications($video, $social);
 
-        return to_route('dashboard')->with('status', 'Video guardado correctamente.');
+        return to_route('videos.index')->with('status', 'Video guardado correctamente.');
     }
 
     public function edit(Request $request, YoutubeJsonTracker $video): View
