@@ -52,4 +52,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(YoutubeJsonTracker::class);
     }
+
+    public function playlists(): HasMany
+    {
+        return $this->hasMany(Playlist::class);
+    }
 }

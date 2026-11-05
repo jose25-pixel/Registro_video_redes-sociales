@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use Carbon\Carbon;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -26,6 +27,21 @@ class VideoStoreRequest extends FormRequest
         }
         if ($this->input('tipo_aparato') !== 'Lavadora') {
             $data['kg'] = null;
+        }
+
+        $publicationDate = $this->input('fecha_publicacion');
+        if (
+            ($this->input('youtube_publicado') ?: 'si') === 'si'
+            && blank($this->input('fecha_subido'))
+            && is_string($publicationDate)
+            && preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $publicationDate, $dateParts) === 1
+            && checkdate((int) $dateParts[2], (int) $dateParts[3], (int) $dateParts[1])
+        ) {
+            $data['fecha_subido'] = Carbon::createFromDate(
+                (int) $dateParts[1],
+                (int) $dateParts[2],
+                (int) $dateParts[3],
+            )->subDays(5)->toDateString();
         }
 
         $this->merge($data);
@@ -57,8 +73,8 @@ class VideoStoreRequest extends FormRequest
             'ruta_ubicacion_original' => ['nullable', 'required_if:guardado_original,Si', 'string', 'max:255'],
             'guardado_editado' => ['required', 'in:Si,No,Posible'],
             'ruta_ubicacion_editado' => ['nullable', 'required_if:guardado_editado,Si', 'string', 'max:255'],
-            'youtube_publicado' => ['required', 'in:si,no'],
-            'fecha_subido' => ['nullable', 'required_if:youtube_publicado,si', 'date'],
+            'youtube_publicado' => ['required', 'in:si,no,privado'],
+            'fecha_subido' => ['nullable', 'required_if:youtube_publicado,si,privado', 'date'],
             'fecha_publicacion' => ['nullable', 'required_if:youtube_publicado,si', 'date', 'after_or_equal:fecha_subido'],
             'titulo' => ['nullable', 'required_if:youtube_publicado,si', 'string', 'max:255'],
             'mes' => ['nullable', 'string', 'max:255'],

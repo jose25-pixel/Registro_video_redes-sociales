@@ -20,11 +20,19 @@ class YoutubeJsonTrackerController extends Controller
 
         if ($request->filled('q')) {
             $term = $request->string('q')->toString();
-            $query->where(function ($videoQuery) use ($term) {
+            $youtubeVideoId = $this->extractYoutubeVideoId($term);
+            $query->where(function ($videoQuery) use ($term, $youtubeVideoId) {
                 $videoQuery->where('titulo', 'like', "%{$term}%")
                     ->orWhere('modelo', 'like', "%{$term}%")
                     ->orWhere('marca', 'like', "%{$term}%")
-                    ->orWhere('tema_error', 'like', "%{$term}%");
+                    ->orWhere('tema_error', 'like', "%{$term}%")
+                    ->orWhere('youtube_link', 'like', "%{$term}%")
+                    ->orWhere('link_lista', 'like', "%{$term}%")
+                    ->orWhereHas('socialPublications', fn ($socialQuery) => $socialQuery->where('link', 'like', "%{$term}%"));
+
+                if ($youtubeVideoId !== null) {
+                    $videoQuery->orWhere('youtube_link', 'like', "%{$youtubeVideoId}%");
+                }
             });
         }
 
@@ -61,6 +69,7 @@ class YoutubeJsonTrackerController extends Controller
         $suggestions = collect();
         if ($suggestionContext !== '') {
             $suggestionsQuery = $request->user()->videos()
+                ->where('youtube_publicado', 'si')
                 ->with('socialPublications');
 
             if ($request->filled('q')) {
@@ -127,71 +136,133 @@ class YoutubeJsonTrackerController extends Controller
         return view('videos.index', compact('videos', 'total', 'latest', 'types', 'suggestions', 'suggestionContext'));
     }
 
-    public function create(): View
+    public function create(Request $request): View
     {
-        return view('videos.create', ['video' => new YoutubeJsonTracker]);
+        $ultimaLista = $request->user()->playlists()->latest('id')->first();
+        $ultimaListaTitulo = $ultimaLista?->name;
+        $ultimaListaLink = $ultimaLista?->url;
+
+        if (! $ultimaLista) {
+            $ultimaLista = $request->user()->videos()
+            ->whereNotNull('link_lista')
+            ->where('link_lista', '!=', '')
+            ->where('youtube_publicado', 'si')
+            ->latest('id')
+            ->first(['titulo_lista', 'link_lista']);
+            $ultimaListaTitulo = $ultimaLista?->titulo_lista;
+            $ultimaListaLink = $ultimaLista?->link_lista;
+        }
+
+        return view('videos.create', [
+            'video' => new YoutubeJsonTracker,
+            'ultimaListaTitulo' => $ultimaListaTitulo,
+            'ultimaListaLink' => $ultimaListaLink,
+        ]);
     }
 
     public function relatedSearch(Request $request): JsonResponse
     {
+        $request->validate([
+            'limit' => ['sometimes', 'integer', 'min:1', 'max:50'],
+            'incluir_referencia' => ['sometimes', 'boolean'],
+        ]);
         $model = trim((string) $request->query('modelo'));
         $type = trim((string) $request->query('tipo_aparato'));
         $brand = trim((string) $request->query('marca'));
+        $kg = $request->query('kg');
+        $keyword = trim((string) $request->query('tema_error'));
         $currentId = $request->integer('video_id');
-
-        if ($model === '' && ($type === '' || $brand === '')) {
-            return response()->json([]);
-        }
-
-        $baseQuery = $request->user()->videos()
-            ->with(['socialPublications' => fn ($query) => $query->whereIn('platform', ['facebook', 'tiktok'])->where('publicado', 'si')->whereNotNull('link')])
-            ->select(['id', 'tipo_aparato', 'marca', 'kg', 'modelo', 'titulo', 'youtube_link', 'titulo_lista', 'link_lista'])
-            ->where(function ($query) {
-                $query->whereNotNull('youtube_link')
-                    ->orWhereHas('socialPublications', fn ($socialQuery) => $socialQuery->whereIn('platform', ['facebook', 'tiktok'])->where('publicado', 'si')->whereNotNull('link'));
-            })
-            ->when($currentId > 0, fn ($query) => $query->where('id', '!=', $currentId));
-
-        $sameModelVideos = (clone $baseQuery)->where('modelo', $model)->latest()->get();
-        $fallbackVideos = collect();
+        $limit = $request->integer('limit', 10);
+        $includeReference = $request->boolean('incluir_referencia');
         $refrigeratorTypes = ['Nevera', 'Nevera frio seco', 'Frigobar', 'Camara', 'Nevera pequeña'];
         $fallbackTypes = in_array($type, $refrigeratorTypes, true)
             ? ['Lavadora']
             : $refrigeratorTypes;
 
-        if ($sameModelVideos->isEmpty() && $brand !== '') {
-            $fallbackVideos = (clone $baseQuery)
-                ->where('marca', $brand)
-                ->whereIn('tipo_aparato', $fallbackTypes)
-                ->latest()
-                ->get();
+        if ($model === '' && $type === '' && $kg === null && $keyword === '') {
+            return response()->json([]);
         }
 
-        if ($sameModelVideos->isEmpty() && $fallbackVideos->isEmpty()) {
-            $washingMachineModel = (clone $baseQuery)
-                ->where('tipo_aparato', 'Lavadora')
-                ->where('modelo', '!=', $model)
-                ->inRandomOrder()
-                ->value('modelo');
+        $videos = $request->user()->videos()
+            ->with(['socialPublications' => fn ($query) => $query->whereIn('platform', ['facebook', 'tiktok'])->where('publicado', 'si')->whereNotNull('link')])
+            ->select(['id', 'tipo_aparato', 'marca', 'kg', 'modelo', 'titulo', 'tema_error', 'descripcion', 'youtube_publicado', 'youtube_link', 'titulo_lista', 'link_lista'])
+            ->where(function ($query) {
+                $query->where(function ($youtubeQuery) {
+                    $youtubeQuery->where('youtube_publicado', 'si')
+                        ->where(fn ($linkQuery) => $linkQuery->whereNotNull('youtube_link')->orWhereNotNull('link_lista'));
+                })
+                    ->orWhereHas('socialPublications', fn ($socialQuery) => $socialQuery->whereIn('platform', ['facebook', 'tiktok'])->where('publicado', 'si')->whereNotNull('link'));
+            })
+            ->where('youtube_publicado', '!=', 'privado')
+            ->where(function ($query) use ($model, $type, $brand, $kg, $keyword, $fallbackTypes) {
+                if ($model !== '') {
+                    $query->orWhere('modelo', 'like', "%{$model}%");
+                }
+                if ($keyword !== '') {
+                    $query->orWhere('titulo', 'like', "%{$keyword}%")
+                        ->orWhere('tema_error', 'like', "%{$keyword}%")
+                        ->orWhere('descripcion', 'like', "%{$keyword}%");
+                }
+                if ($type !== '') {
+                    $query->orWhere(function ($relatedQuery) use ($type, $brand, $kg) {
+                        $relatedQuery->where('tipo_aparato', $type);
+                        if ($kg !== null && $brand !== '') {
+                            $relatedQuery->where(fn ($matchQuery) => $matchQuery->where('kg', $kg)->orWhere('marca', $brand));
+                        } elseif ($kg !== null) {
+                            $relatedQuery->where('kg', $kg);
+                        } elseif ($brand !== '') {
+                            $relatedQuery->where('marca', $brand);
+                        }
+                    });
+                    if ($brand !== '') {
+                        $query->orWhere(fn ($relatedQuery) => $relatedQuery->where('marca', $brand)->whereIn('tipo_aparato', $fallbackTypes));
+                    }
+                } elseif ($kg !== null) {
+                    $query->orWhere('kg', $kg);
+                }
+            })
+            ->when($currentId > 0 && ! $includeReference, fn ($query) => $query->where('id', '!=', $currentId));
+        $videos = $videos->get()
+            ->sortBy(function (YoutubeJsonTracker $video) use ($model, $type, $brand, $kg, $keyword, $fallbackTypes) {
+                if ($model !== '' && strcasecmp(trim((string) $video->modelo), $model) === 0) {
+                    return 0;
+                }
+                if ($model !== '' && stripos((string) $video->modelo, $model) !== false) {
+                    return 1;
+                }
+                if ($keyword !== '' && (
+                    stripos((string) $video->titulo, $keyword) !== false
+                    || stripos((string) $video->tema_error, $keyword) !== false
+                    || stripos((string) $video->descripcion, $keyword) !== false
+                )) {
+                    return 2;
+                }
+                if ($type !== '' && $video->tipo_aparato === $type && $kg !== null && (float) $video->kg === (float) $kg) {
+                    return 3;
+                }
+                if ($type !== '' && $video->tipo_aparato === $type && $brand !== '' && $video->marca === $brand) {
+                    return 4;
+                }
+                if ($kg !== null && (float) $video->kg === (float) $kg) {
+                    return 5;
+                }
+                if ($brand !== '' && in_array($video->tipo_aparato, $fallbackTypes, true) && $video->marca === $brand) {
+                    return 6;
+                }
 
-            if ($washingMachineModel) {
-                $fallbackVideos = (clone $baseQuery)->where('modelo', $washingMachineModel)->latest()->get();
-            }
-        }
-
-        $videos = $sameModelVideos
-            ->concat($fallbackVideos)
-            ->unique('id')
+                return 7;
+            })
+            ->take($limit)
             ->values()
             ->groupBy(fn (YoutubeJsonTracker $video) => trim((string) $video->modelo) ?: 'Sin modelo')
             ->map(fn ($modelVideos, string $model) => [
                 'modelo' => $model,
-                'videos' => $modelVideos->take(8)->map(fn (YoutubeJsonTracker $video) => [
+                'videos' => $modelVideos->map(fn (YoutubeJsonTracker $video) => [
                     'id' => $video->id,
                     'titulo' => $video->titulo,
-                    'link' => $video->youtube_link,
+                    'link' => $video->youtube_publicado === 'si' ? $video->youtube_link : null,
                     'titulo_lista' => $video->titulo_lista,
-                    'link_lista' => $video->link_lista,
+                    'link_lista' => $video->youtube_publicado === 'si' ? $video->link_lista : null,
                     'social' => $video->socialPublications->map(fn ($publication) => [
                         'platform' => $publication->platform,
                         'titulo' => $publication->titulo ?: $video->titulo,
@@ -202,6 +273,56 @@ class YoutubeJsonTrackerController extends Controller
             ->values();
 
         return response()->json($videos);
+    }
+
+    public function checkYoutubeLink(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'url' => ['required', 'url', 'max:255'],
+            'video_id' => ['nullable', 'integer'],
+        ]);
+        $youtubeVideoId = $this->extractYoutubeVideoId($validated['url']);
+
+        if ($youtubeVideoId === null) {
+            return response()->json(['exists' => false]);
+        }
+
+        $currentVideoId = (int) ($validated['video_id'] ?? 0);
+        $matches = $request->user()->videos()
+            ->whereNotNull('youtube_link')
+            ->where('youtube_link', 'like', "%{$youtubeVideoId}%")
+            ->when($currentVideoId > 0, fn ($query) => $query->where('id', '!=', $currentVideoId))
+            ->get(['id', 'titulo', 'youtube_link']);
+
+        $match = $matches->first(fn (YoutubeJsonTracker $video) => $this->extractYoutubeVideoId($video->youtube_link) === $youtubeVideoId);
+
+        return response()->json([
+            'exists' => $match !== null,
+            'id' => $match?->id,
+            'titulo' => $match?->titulo,
+            'link' => $match?->youtube_link,
+            'edit_url' => $match ? route('videos.edit', $match) : null,
+        ]);
+    }
+
+    private function extractYoutubeVideoId(string $url): ?string
+    {
+        $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+        $path = trim((string) parse_url($url, PHP_URL_PATH), '/');
+
+        if ($host === 'youtu.be' || $host === 'www.youtu.be') {
+            $videoId = explode('/', $path)[0] ?? '';
+        } elseif (in_array($host, ['youtube.com', 'www.youtube.com', 'm.youtube.com'], true)) {
+            parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+            $segments = explode('/', $path);
+            $videoId = ($segments[0] ?? '') === 'watch'
+                ? ($query['v'] ?? '')
+                : (in_array($segments[0] ?? '', ['shorts', 'embed', 'live'], true) ? ($segments[1] ?? '') : '');
+        } else {
+            return null;
+        }
+
+        return preg_match('/^[A-Za-z0-9_-]{11}$/', $videoId) === 1 ? $videoId : null;
     }
 
     public function store(VideoStoreRequest $request): RedirectResponse
@@ -215,6 +336,7 @@ class YoutubeJsonTrackerController extends Controller
         $data = $this->storeThumbnail($request, $data);
 
         $video = $request->user()->videos()->create($data);
+        $this->attachPlaylist($video, $data['titulo_lista'] ?? null, $data['link_lista'] ?? null);
         $this->saveSocialPublications($video, $social);
 
         return to_route('videos.index')->with('status', 'Video guardado correctamente.');
@@ -223,14 +345,33 @@ class YoutubeJsonTrackerController extends Controller
     public function edit(Request $request, YoutubeJsonTracker $video): View
     {
         abort_unless($video->user_id === $request->user()->id, 404);
+        $video->load('playlists');
 
         return view('videos.edit', compact('video'));
+    }
+
+    public function storePlaylist(Request $request, YoutubeJsonTracker $video): RedirectResponse
+    {
+        abort_unless($video->user_id === $request->user()->id, 404);
+
+        $data = $request->validate([
+            'playlist_title' => ['nullable', 'string', 'max:255'],
+            'playlist_url' => ['required', 'url', 'max:255'],
+        ]);
+
+        $playlist = $request->user()->playlists()->updateOrCreate(
+            ['url' => $data['playlist_url']],
+            ['name' => filled($data['playlist_title'] ?? null) ? $data['playlist_title'] : $data['playlist_url']],
+        );
+        $video->playlists()->syncWithoutDetaching([$playlist->id]);
+
+        return to_route('videos.edit', $video)->with('status', 'Lista asociada al video correctamente.');
     }
 
     public function show(Request $request, YoutubeJsonTracker $video): View
     {
         abort_unless($video->user_id === $request->user()->id, 404);
-        $video->load('socialPublications');
+        $video->load(['socialPublications', 'playlists']);
 
         return view('videos.show', compact('video'));
     }
@@ -247,6 +388,7 @@ class YoutubeJsonTrackerController extends Controller
         $data = $this->storeThumbnail($request, $data, $video);
 
         $video->update($data);
+        $this->attachPlaylist($video, $data['titulo_lista'] ?? null, $data['link_lista'] ?? null);
         $this->saveSocialPublications($video, $social);
 
         return to_route('dashboard')->with('status', 'Video actualizado correctamente.');
@@ -284,9 +426,22 @@ class YoutubeJsonTrackerController extends Controller
         }
     }
 
+    private function attachPlaylist(YoutubeJsonTracker $video, ?string $title, ?string $url): void
+    {
+        if (blank($url)) {
+            return;
+        }
+
+        $playlist = $video->user->playlists()->updateOrCreate(
+            ['url' => $url],
+            ['name' => filled($title) ? $title : $url],
+        );
+        $video->playlists()->syncWithoutDetaching([$playlist->id]);
+    }
+
     private function setPublicationPeriod(array $data): array
     {
-        if (($data['youtube_publicado'] ?? 'si') !== 'si') {
+        if (($data['youtube_publicado'] ?? 'si') === 'no') {
             $data['fecha_subido'] = null;
             $data['fecha_publicacion'] = null;
             $data['titulo'] = null;
@@ -300,6 +455,16 @@ class YoutubeJsonTrackerController extends Controller
             $data['link_lista'] = null;
             $data['youtube_ruta_editado'] = null;
             $data['youtube_formato_guardado'] = 'no';
+            $data['publicado_comunidad'] = 'no';
+
+            return $data;
+        }
+
+        if ($data['youtube_publicado'] === 'privado') {
+            $data['fecha_publicacion'] = null;
+            $data['mes'] = null;
+            $data['anio'] = null;
+            $data['red_social'] = null;
             $data['publicado_comunidad'] = 'no';
 
             return $data;

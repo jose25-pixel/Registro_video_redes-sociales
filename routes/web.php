@@ -22,6 +22,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/configuracion-inicial', [CategorySetupController::class, 'edit'])->name('category.setup');
     Route::post('/configuracion-inicial', [CategorySetupController::class, 'update'])->name('category.setup.update');
     Route::get('/videos/related-search', [YoutubeJsonTrackerController::class, 'relatedSearch'])->name('videos.related-search')->middleware('throttle:60,1');
+    Route::get('/videos/check-youtube-link', [YoutubeJsonTrackerController::class, 'checkYoutubeLink'])->name('videos.check-youtube-link')->middleware('throttle:60,1');
+    Route::post('/videos/{video}/playlists', [YoutubeJsonTrackerController::class, 'storePlaylist'])->name('videos.playlists.store')->middleware('throttle:60,1');
     Route::resource('videos', YoutubeJsonTrackerController::class)->except('show')->middleware('throttle:60,1');
     Route::get('/videos/{video}/details', [YoutubeJsonTrackerController::class, 'show'])->name('videos.show');
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
